@@ -1,114 +1,132 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+import { useState } from 'react';
+import Link from 'next/link';
+import { motion } from 'framer-motion';
+import { Phone, Wrench, ShoppingBag, Info, Mail } from 'lucide-react';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+export default function HomePage() {
+  const [isOpen, setIsOpen] = useState(false);
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export default function Home() {
   return (
-    <div
-      className={`${geistSans.className} ${geistMono.className} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
-    >
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/pages/index.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-gradient-to-b from-[#b3e5fc] via-[#f3e5f5] to-[#fff] text-gray-800 flex flex-col">
+      {/* Navbar */}
+      <header className="sticky top-0 bg-white bg-opacity-80 backdrop-blur z-50 shadow-md">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <h1 className="text-xl font-extrabold text-purple-700 tracking-wide">Goku Komunika</h1>
+          <div className="md:hidden">
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="focus:outline-none text-purple-700 text-2xl"
+            >
+              ☰
+            </button>
+          </div>
+          <nav className="hidden md:flex items-center space-x-6 font-medium">
+            <a href="#profil" className="hover:text-purple-600 transition">Profil</a>
+            <a href="#tentang" className="hover:text-purple-600 transition">Tentang Kami</a>
+            <a href="#website" className="hover:text-purple-600 transition">Tentang Website</a>
+            <a href="#kontak" className="hover:text-purple-600 transition">Kontak</a>
+            <Link href="/login">
+              <span className="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow">Login</span>
+            </Link>
+            <Link href="/register">
+              <span className="ml-2 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition shadow">Register</span>
+            </Link>
+          </nav>
         </div>
+        {/* Mobile Menu */}
+        {isOpen && (
+          <nav className="md:hidden px-4 pb-4 space-y-2">
+            <a href="#profil" className="block hover:text-purple-600">Profil</a>
+            <a href="#tentang" className="block hover:text-purple-600">Tentang Kami</a>
+            <a href="#website" className="block hover:text-purple-600">Tentang Website</a>
+            <a href="#kontak" className="block hover:text-purple-600">Kontak</a>
+            <Link href="/login">
+              <span className="block mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-center hover:bg-purple-700 transition">Login</span>
+            </Link>
+            <Link href="/register">
+              <span className="block mt-2 px-4 py-2 bg-pink-600 text-white rounded-lg text-center hover:bg-pink-700 transition">Register</span>
+            </Link>
+          </nav>
+        )}
+      </header>
+
+      {/* Content Sections */}
+      <main className="flex-1 max-w-5xl mx-auto px-4 py-12 space-y-12">
+        <motion.section
+          id="profil"
+          className="text-center border border-gray-300/50 rounded-xl p-8 shadow-lg bg-white bg-opacity-90"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <Phone className="mx-auto text-purple-700 w-12 h-12 mb-3" />
+          <h2 className="text-3xl font-bold text-purple-700 mb-4">Profil Toko</h2>
+          <p className="text-lg leading-relaxed text-gray-700">
+            <strong>Goku Komunika</strong> adalah pusat layanan dan penjualan handphone yang telah dipercaya masyarakat
+            selama bertahun-tahun. Kami menyediakan jasa perbaikan cepat, penjualan berbagai merek HP terbaru,
+            dan aksesori lengkap untuk memenuhi semua kebutuhan komunikasi Anda. Dengan mengutamakan <em>kecepatan</em>,
+            <em>ketepatan</em>, dan <em>kepuasan pelanggan</em>, kami menjadi mitra terbaik bagi siapa saja yang ingin
+            tetap terhubung tanpa hambatan.
+          </p>
+        </motion.section>
+
+        <motion.section
+          id="tentang"
+          className="text-center border border-gray-300/50 rounded-xl p-8 shadow-lg bg-white bg-opacity-90"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+        >
+          <Info className="mx-auto text-purple-700 w-12 h-12 mb-3" />
+          <h2 className="text-3xl font-bold text-purple-700 mb-4">Tentang Kami</h2>
+          <p className="text-lg leading-relaxed text-gray-700">
+            Kami berdiri dengan komitmen untuk memberikan solusi terbaik dalam dunia komunikasi. Mulai dari
+            perbaikan perangkat yang rusak, penjualan unit baru, hingga menyediakan perlengkapan tambahan
+            seperti charger, earphone, dan casing berkualitas. Dengan teknisi berpengalaman dan harga yang
+            transparan, setiap layanan yang kami berikan selalu mengutamakan kepercayaan dan kepuasan pelanggan.
+          </p>
+        </motion.section>
+
+        <motion.section
+          id="website"
+          className="text-center border border-gray-300/50 rounded-xl p-8 shadow-lg bg-white bg-opacity-90"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+        >
+          <ShoppingBag className="mx-auto text-purple-700 w-12 h-12 mb-3" />
+          <h2 className="text-3xl font-bold text-purple-700 mb-4">Tentang Website</h2>
+          <p className="text-lg leading-relaxed text-gray-700">
+            Website ini dirancang sebagai pusat informasi dan sistem manajemen internal untuk Goku Komunika.
+            Di sini, pelanggan dapat memantau status perbaikan perangkat, sedangkan admin dapat mengelola stok barang,
+            pencatatan penjualan, dan pengaturan layanan dengan mudah. Desainnya dibuat agar <em>user-friendly</em>,
+            responsif, dan dapat diakses kapan saja dari berbagai perangkat.
+          </p>
+        </motion.section>
+
+        <motion.section
+          id="kontak"
+          className="text-center border border-gray-300/50 rounded-xl p-8 shadow-lg bg-white bg-opacity-90"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
+        >
+          <Mail className="mx-auto text-purple-700 w-12 h-12 mb-3" />
+          <h2 className="text-3xl font-bold text-purple-700 mb-4">Kontak Kami</h2>
+          <p className="text-lg text-gray-700 mb-2">
+            <strong>Alamat:</strong> Jl. Parakan Muncang, Sindang Kasih, Kec. Cimanggung, Kab. Sumedang
+          </p>
+          <p className="text-lg text-gray-700">
+            <strong>WhatsApp:</strong> <a href="https://wa.me/6285136336006" className="text-purple-700 hover:underline">0851-3633-6006</a>
+          </p>
+        </motion.section>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* Footer */}
+      <footer className="bg-blue-700 text-white text-center py-5 mt-auto shadow-inner">
+        <p className="text-sm tracking-wide">
+          &copy; {new Date().getFullYear()} Goku Komunika | Dibuat oleh Raya Rizkyana. All rights reserved.
+        </p>
       </footer>
     </div>
   );
