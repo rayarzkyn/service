@@ -28,9 +28,7 @@ export default function HomePage() {
             <Link href="/login">
               <span className="ml-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow">Login</span>
             </Link>
-            <Link href="/register">
-              <span className="ml-2 px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition shadow">Register</span>
-            </Link>
+            
           </nav>
         </div>
         {/* Mobile Menu */}
@@ -43,9 +41,7 @@ export default function HomePage() {
             <Link href="/login">
               <span className="block mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-center hover:bg-purple-700 transition">Login</span>
             </Link>
-            <Link href="/register">
-              <span className="block mt-2 px-4 py-2 bg-pink-600 text-white rounded-lg text-center hover:bg-pink-700 transition">Register</span>
-            </Link>
+            
           </nav>
         )}
       </header>

@@ -1,4 +1,3 @@
-// firebase/config.js
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -13,7 +12,6 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Cek kalau API key kosong
 if (!firebaseConfig.apiKey) {
   throw new Error(
     "Firebase API Key is missing. Pastikan environment variables sudah diatur di Vercel dan .env.local."
