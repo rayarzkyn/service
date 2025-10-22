@@ -14,7 +14,8 @@ import {
   query,
   orderBy,
   writeBatch,
-  increment
+  increment,
+  where
 } from 'firebase/firestore';
 
 export default function AdminDashboard() {
@@ -37,12 +38,16 @@ export default function AdminDashboard() {
     namaPembeli: '',
     items: [],
     totalHarga: 0,
+    pembayaran: 0,
+    kembalian: 0,
     tanggal: new Date()
   });
   const [newPembelian, setNewPembelian] = useState({
     namaSupplier: '',
     items: [],
     totalHarga: 0,
+    pembayaran: 0,
+    kembalian: 0,
     tanggal: new Date()
   });
   const [editing, setEditing] = useState(null);
@@ -55,7 +60,9 @@ export default function AdminDashboard() {
     kerusakan: '',
     biaya: 0,
     status: 'Menunggu Konfirmasi',
-    sparepartsUsed: []
+    sparepartsUsed: [],
+    pembayaran: 0,
+    kembalian: 0
   });
   const [activeTab, setActiveTab] = useState('service');
   const [isMobile, setIsMobile] = useState(false);
@@ -66,7 +73,143 @@ export default function AdminDashboard() {
   const [searchPenjualan, setSearchPenjualan] = useState('');
   const [searchPembelian, setSearchPembelian] = useState('');
   const [searchBarangPembelian, setSearchBarangPembelian] = useState('');
+  
+  // STATE BARU: Untuk service yang dikelompokkan per hari
+  const [servicesGroupedByDate, setServicesGroupedByDate] = useState([]);
+  
   const router = useRouter();
+
+  // FUNGSI BARU: Generate ID Service
+  const generateServiceId = async () => {
+    const today = new Date();
+    const dateString = today.toISOString().slice(2, 10).replace(/-/g, '');
+    
+    // Cari service dengan tanggal hari ini
+    const todayStart = new Date(today);
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const servicesTodaySnapshot = await getDocs(
+      query(
+        collection(db, 'service'),
+        where('tanggalMasuk', '>=', todayStart),
+        where('tanggalMasuk', '<=', todayEnd)
+      )
+    );
+
+    const sequenceNumber = (servicesTodaySnapshot.size + 1).toString().padStart(3, '0');
+    
+    return `SRV${dateString}${sequenceNumber}`;
+  };
+
+  // FUNGSI BARU: Mengelompokkan service berdasarkan tanggal dan menghitung laba
+  const groupServicesByDate = (servicesData) => {
+    const grouped = {};
+    
+    servicesData.forEach(service => {
+      const date = service.tanggalMasuk?.toDate?.().toLocaleDateString('id-ID') || 'Tanggal Tidak Diketahui';
+      
+      if (!grouped[date]) {
+        grouped[date] = {
+          date,
+          services: [],
+          totalBiaya: 0,
+          totalLaba: 0,
+          totalPendapatan: 0
+        };
+      }
+      
+      // PERBAIKAN: Hitung biaya sparepart (harga jual)
+      const biayaSparepart = service.sparepartsUsed?.reduce((sum, item) => {
+        const sparepart = stokBarang.find(sp => sp.nama_barang === item.nama);
+        return sum + ((sparepart?.harga_jual || 0) * item.qty);
+      }, 0) || 0;
+      
+      // PERBAIKAN: Total pendapatan adalah biaya service + biaya sparepart (harga jual)
+      const totalPendapatan = (service.biaya || 0) + biayaSparepart;
+      
+      // PERBAIKAN: Hitung laba = (biaya service + biaya sparepart harga jual) - (biaya sparepart harga beli)
+      const biayaSparepartHargaBeli = service.sparepartsUsed?.reduce((sum, item) => {
+        const sparepart = stokBarang.find(sp => sp.nama_barang === item.nama);
+        return sum + ((sparepart?.harga_beli || 0) * item.qty);
+      }, 0) || 0;
+      
+      const totalLaba = totalPendapatan - biayaSparepartHargaBeli;
+      
+      grouped[date].services.push({
+        ...service,
+        biayaSparepart, // Harga jual sparepart
+        biayaSparepartHargaBeli, // Harga beli sparepart
+        totalPendapatan,
+        totalLaba
+      });
+      
+      grouped[date].totalBiaya += service.biaya || 0;
+      grouped[date].totalLaba += totalLaba;
+      grouped[date].totalPendapatan += totalPendapatan;
+    });
+    
+    // Konversi ke array dan urutkan berdasarkan tanggal (terbaru dulu)
+    return Object.values(grouped).sort((a, b) => 
+      new Date(b.services[0]?.tanggalMasuk?.toDate?.() || 0) - 
+      new Date(a.services[0]?.tanggalMasuk?.toDate?.() || 0)
+    );
+  };
+
+  // PERBAIKAN: Fungsi untuk menghitung total biaya service (termasuk sparepart)
+  const calculateTotalBiayaService = () => {
+    const biayaService = newService.biaya || 0;
+    const biayaSparepart = newService.sparepartsUsed?.reduce((total, item) => {
+      const sparepart = stokBarang.find(sp => sp.nama_barang === item.nama);
+      if (sparepart) {
+        return total + (sparepart.harga_jual * item.qty);
+      }
+      return total;
+    }, 0) || 0;
+    
+    return biayaService + biayaSparepart;
+  };
+
+  // PERBAIKAN: Fungsi untuk menghitung kembalian
+  const calculateKembalian = (pembayaran, totalHarga) => {
+    return Math.max(0, pembayaran - totalHarga);
+  };
+
+  // PERBAIKAN: Update pembayaran untuk service
+  const handlePembayaranServiceChange = (pembayaran) => {
+    const totalBiaya = calculateTotalBiayaService();
+    const kembalian = calculateKembalian(pembayaran, totalBiaya);
+    
+    setNewService({
+      ...newService,
+      pembayaran: pembayaran,
+      kembalian: kembalian
+    });
+  };
+
+  // PERBAIKAN: Update pembayaran untuk penjualan
+  const handlePembayaranPenjualanChange = (pembayaran) => {
+    const kembalian = calculateKembalian(pembayaran, newPenjualan.totalHarga);
+    
+    setNewPenjualan({
+      ...newPenjualan,
+      pembayaran: pembayaran,
+      kembalian: kembalian
+    });
+  };
+
+  // PERBAIKAN: Update pembayaran untuk pembelian
+  const handlePembayaranPembelianChange = (pembayaran) => {
+    const kembalian = calculateKembalian(pembayaran, newPembelian.totalHarga);
+    
+    setNewPembelian({
+      ...newPembelian,
+      pembayaran: pembayaran,
+      kembalian: kembalian
+    });
+  };
 
   const handleUpdateBiaya = async (id, biayaBaru) => {
     try {
@@ -150,12 +293,14 @@ export default function AdminDashboard() {
         getDocs(query(collection(db, 'barang'), orderBy('tanggal', 'desc')))
       ]);
 
-      setServices(serviceSnapshot.docs.map(doc => ({
+      const servicesData = serviceSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
         sparepartsUsed: doc.data().sparepartsUsed || [],
         formattedDate: doc.data().tanggalMasuk?.toDate?.().toLocaleString('id-ID') || '-'
-      })));
+      }));
+
+      setServices(servicesData);
 
       const sortedStok = stokSnapshot.docs
         .map(doc => ({
@@ -194,6 +339,14 @@ export default function AdminDashboard() {
       setDataBarang([]);
     }
   };
+
+  // EFFECT BARU: Update servicesGroupedByDate ketika services atau stokBarang berubah
+  useEffect(() => {
+    if (services.length > 0 && stokBarang.length > 0) {
+      const groupedServices = groupServicesByDate(services);
+      setServicesGroupedByDate(groupedServices);
+    }
+  }, [services, stokBarang]);
 
   // ========== FUNGSI BARU: PEMBELIAN BARANG ==========
   const handleAddPembelianItem = () => {
@@ -267,6 +420,11 @@ export default function AdminDashboard() {
       return;
     }
 
+    if (newPembelian.pembayaran < newPembelian.totalHarga) {
+      alert('Pembayaran tidak mencukupi!');
+      return;
+    }
+
     try {
       // 1. Update atau tambah stok barang
       const updateStockPromises = newPembelian.items.map(async (item) => {
@@ -310,6 +468,8 @@ export default function AdminDashboard() {
         namaSupplier: '',
         items: [],
         totalHarga: 0,
+        pembayaran: 0,
+        kembalian: 0,
         tanggal: new Date()
       });
       setSearchBarangPembelian('');
@@ -338,6 +498,7 @@ export default function AdminDashboard() {
               .items-table th, .items-table td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
               .total { border-top: 2px solid #000; padding-top: 10px; text-align: right; font-weight: bold; }
               .footer { text-align: center; margin-top: 20px; }
+              .payment-info { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
               @media print { body { margin: 0; } .nota { border: none; } }
             </style>
           </head>
@@ -376,8 +537,10 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
 
-              <div class="total">
-                <p>TOTAL: Rp ${pembelianData.totalHarga?.toLocaleString()}</p>
+              <div class="payment-info">
+                <p><strong>Total: Rp ${pembelianData.totalHarga?.toLocaleString()}</strong></p>
+                <p>Pembayaran: Rp ${pembelianData.pembayaran?.toLocaleString()}</p>
+                <p>Kembalian: Rp ${pembelianData.kembalian?.toLocaleString()}</p>
               </div>
 
               <div class="footer">
@@ -460,6 +623,11 @@ export default function AdminDashboard() {
       return;
     }
 
+    if (newPenjualan.pembayaran < newPenjualan.totalHarga) {
+      alert('Pembayaran tidak mencukupi!');
+      return;
+    }
+
     for (const item of newPenjualan.items) {
       const product = stokBarang.find(p => p.nama_barang === item.nama_barang);
       if (!product) {
@@ -496,6 +664,8 @@ export default function AdminDashboard() {
         namaPembeli: '',
         items: [],
         totalHarga: 0,
+        pembayaran: 0,
+        kembalian: 0,
         tanggal: new Date()
       });
       setSearchPenjualan('');
@@ -525,6 +695,7 @@ export default function AdminDashboard() {
               .items-table th, .items-table td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
               .total { border-top: 2px solid #000; padding-top: 10px; text-align: right; font-weight: bold; }
               .footer { text-align: center; margin-top: 20px; }
+              .payment-info { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
               @media print { body { margin: 0; } .nota { border: none; } }
             </style>
           </head>
@@ -563,12 +734,108 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
 
-              <div class="total">
-                <p>TOTAL: Rp ${penjualanData.totalHarga?.toLocaleString()}</p>
+              <div class="payment-info">
+                <p><strong>Total: Rp ${penjualanData.totalHarga?.toLocaleString()}</strong></p>
+                <p>Pembayaran: Rp ${penjualanData.pembayaran?.toLocaleString()}</p>
+                <p>Kembalian: Rp ${penjualanData.kembalian?.toLocaleString()}</p>
               </div>
 
               <div class="footer">
                 <p>Terima kasih atas kunjungan Anda</p>
+              </div>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(() => window.close(), 1000);
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }, 500);
+  };
+
+  // PERBAIKAN: Fungsi cetak nota untuk service
+  const handleCetakNotaService = (serviceData) => {
+    const totalBiaya = (serviceData.biaya || 0) + (serviceData.biayaSparepart || 0);
+    
+    setTimeout(() => {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Nota Service</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              .nota { border: 2px solid #000; padding: 20px; max-width: 400px; margin: 0 auto; }
+              .header { text-align: center; margin-bottom: 20px; }
+              .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+              .items-table th, .items-table td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+              .total { border-top: 2px solid #000; padding-top: 10px; text-align: right; font-weight: bold; }
+              .footer { text-align: center; margin-top: 20px; }
+              .payment-info { background: #f5f5f5; padding: 10px; margin: 10px 0; border-radius: 5px; }
+              .customer-info { background: #e8f4fd; padding: 10px; margin: 10px 0; border-radius: 5px; }
+              @media print { body { margin: 0; } .nota { border: none; } }
+            </style>
+          </head>
+          <body>
+            <div class="nota">
+              <div class="header">
+                <h2>GOKU KOMUNIKA</h2>
+                <p>Alamat: Jl. Parakan Muncang, Sindang Kasih, Kec. Cimanggung, Kab. Sumedang</p>
+                <p>Telp: WhatsApp: 0851-3633-6006</p>
+              </div>
+              
+              <div style="border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 10px 0; margin: 10px 0;">
+                <p><strong>Nota Service HP</strong></p>
+                <p>Tanggal: ${serviceData.formattedDate}</p>
+                <p>ID Service: ${serviceData.serviceId}</p>
+              </div>
+
+              <div class="customer-info">
+                <p><strong>Data Pelanggan:</strong></p>
+                <p>Nama: ${serviceData.namaPelanggan}</p>
+                <p>Merk HP: ${serviceData.merkHP}</p>
+                <p>Kerusakan: ${serviceData.kerusakan || '-'}</p>
+              </div>
+
+              <table class="items-table">
+                <thead>
+                  <tr>
+                    <th>Deskripsi</th>
+                    <th>Biaya</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Biaya Service</td>
+                    <td>Rp ${(serviceData.biaya || 0).toLocaleString()}</td>
+                  </tr>
+                  ${serviceData.sparepartsUsed?.map(item => {
+                    const sparepart = stokBarang.find(sp => sp.nama_barang === item.nama);
+                    const harga = sparepart?.harga_jual || 0;
+                    const subtotal = harga * item.qty;
+                    return `
+                      <tr>
+                        <td>${item.nama} (x${item.qty})</td>
+                        <td>Rp ${subtotal.toLocaleString()}</td>
+                      </tr>
+                    `;
+                  }).join('') || ''}
+                </tbody>
+              </table>
+
+              <div class="payment-info">
+                <p><strong>Total Biaya: Rp ${totalBiaya.toLocaleString()}</strong></p>
+                <p>Pembayaran: Rp ${(serviceData.pembayaran || 0).toLocaleString()}</p>
+                <p>Kembalian: Rp ${(serviceData.kembalian || 0).toLocaleString()}</p>
+              </div>
+
+              <div class="footer">
+                <p>Simpan ID Service untuk pengecekan status</p>
+                <p>Terima kasih atas kepercayaan Anda</p>
               </div>
             </div>
             <script>
@@ -626,10 +893,16 @@ export default function AdminDashboard() {
     }
   };
 
-  // Tambah service baru
+  // PERBAIKAN: Tambah service baru dengan ID Service dan pembayaran
   const handleAddService = async () => {
     if (!newService.namaPelanggan || !newService.merkHP) {
       alert('Nama Pelanggan dan Merk HP wajib diisi!');
+      return;
+    }
+
+    const totalBiaya = calculateTotalBiayaService();
+    if (newService.pembayaran < totalBiaya) {
+      alert('Pembayaran tidak mencukupi!');
       return;
     }
 
@@ -656,15 +929,22 @@ export default function AdminDashboard() {
       const stockUpdated = await updateStok(validSpareparts, 'decrement');
       if (!stockUpdated) throw new Error("Gagal update stok");
 
+      // PERBAIKAN: Hitung biaya sparepart menggunakan harga jual
       const sparepartsCost = validSpareparts.reduce((sum, item) => {
         const sparepart = stokBarang.find(sp => sp.nama_barang === item.nama);
         return sum + (sparepart?.harga_jual || 0) * item.qty;
       }, 0);
 
+      // Generate ID Service
+      const serviceId = await generateServiceId();
+
       await addDoc(collection(db, 'service'), {
         ...newService,
-        biaya: Number(newService.biaya) + sparepartsCost,
+        serviceId: serviceId, // ID Service yang unik
+        biaya: Number(newService.biaya), // Biaya service saja (tanpa tambahan sparepart)
         sparepartsUsed: validSpareparts,
+        pembayaran: Number(newService.pembayaran),
+        kembalian: Number(newService.kembalian),
         tanggalMasuk: serverTimestamp(),
         userId: user.uid
       });
@@ -675,10 +955,15 @@ export default function AdminDashboard() {
         kerusakan: '',
         biaya: 0,
         status: 'Menunggu Konfirmasi',
-        sparepartsUsed: []
+        sparepartsUsed: [],
+        pembayaran: 0,
+        kembalian: 0
       });
       setSearchSparepart('');
       fetchData();
+      
+      // Tampilkan ID Service kepada admin
+      alert(`Service berhasil ditambahkan!\nID Service: ${serviceId}\n\nBerikan ID ini kepada pelanggan untuk melacak status service.`);
     } catch (error) {
       console.error("Error adding service:", error);
       alert(`Gagal menambahkan service: ${error.message}`);
@@ -945,7 +1230,7 @@ export default function AdminDashboard() {
           }`}
           onClick={() => setActiveTab('pembelian')}
         >
-          <i className="fas fa-shopping-cart mr-2"></i> Pembelian
+          <i className="fas fa-shopping-cart mr-2"></i> Input Pembelian
         </button>
 
         <button
@@ -995,7 +1280,6 @@ export default function AdminDashboard() {
 
       {/* Konten berdasarkan Tab */}
       {activeTab === 'service' && (
-        // ... (kode service tetap sama)
         <>
           {/* Form Tambah Service */}
           <section className="mb-6 p-6 bg-gradient-to-br from-white to-blue-50 rounded-xl shadow-lg">
@@ -1058,6 +1342,28 @@ export default function AdminDashboard() {
                   <option value="Batal">Batal</option>
                 </select>
               </div>
+              
+              {/* PERBAIKAN: Input Pembayaran untuk Service */}
+              <div>
+                <label className="block text-sm font-medium mb-1 text-blue-700">Pembayaran (Rp)</label>
+                <input
+                  type="number"
+                  value={newService.pembayaran}
+                  onChange={(e) => handlePembayaranServiceChange(Math.max(0, Number(e.target.value)))}
+                  className="w-full p-3 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  min="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 text-blue-700">Kembalian (Rp)</label>
+                <input
+                  type="number"
+                  value={newService.kembalian}
+                  readOnly
+                  className="w-full p-3 border border-blue-200 rounded-lg bg-gray-100 text-gray-700"
+                />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1 text-blue-700">Sparepart Digunakan</label>
                 
@@ -1127,6 +1433,26 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
+
+              {/* PERBAIKAN: Total Biaya Service */}
+              <div className="md:col-span-2">
+                <div className="bg-blue-100 p-4 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-blue-800 mb-2">Rincian Biaya:</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>Biaya Service:</div>
+                    <div className="text-right">Rp {newService.biaya?.toLocaleString() || '0'}</div>
+                    <div>Biaya Sparepart:</div>
+                    <div className="text-right">Rp {newService.sparepartsUsed?.reduce((total, item) => {
+                      const sparepart = stokBarang.find(sp => sp.nama_barang === item.nama);
+                      return total + ((sparepart?.harga_jual || 0) * item.qty);
+                    }, 0)?.toLocaleString() || '0'}</div>
+                    <div className="font-semibold">Total Biaya:</div>
+                    <div className="text-right font-semibold text-green-600">
+                      Rp {calculateTotalBiayaService().toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <button 
               onClick={handleAddService}
@@ -1136,207 +1462,195 @@ export default function AdminDashboard() {
             </button>
           </section>
 
-          {/* Tabel Service */}
+          {/* TAB BARU: Tabel Service yang Dikelompokkan per Hari */}
           <section className="mb-10 bg-white rounded-xl shadow-lg overflow-hidden">
             <div className="p-5 bg-gradient-to-r from-blue-600 to-purple-600">
               <h2 className="text-xl font-semibold text-white flex items-center">
-                <i className="fas fa-list mr-2"></i>Daftar Service
+                <i className="fas fa-list mr-2"></i>Daftar Service per Hari
               </h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="bg-gradient-to-r from-blue-100 to-purple-100">
-                    <th className="p-3 border-b border-blue-200 text-center text-blue-800">No</th>
-                    {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Pelanggan</th>}
-                    {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Merk HP</th>}
-                    {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Kerusakan</th>}
-                    {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Sparepart Digunakan</th>}
-                    <th className="p-3 border-b border-blue-200 text-center text-blue-800">Biaya</th>
-                    <th className="p-3 border-b border-blue-200 text-center text-blue-800">Status</th>
-                    <th className="p-3 border-b border-blue-200 text-center text-blue-800">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {services && services.length > 0 ? (
-                    services.map((service, index) => (
-                      <tr key={service.id} className={
-                        service.status === 'Sudah Selesai' ? 'bg-green-50 hover:bg-green-100' : 
-                        service.status === 'Batal' ? 'bg-red-50 hover:bg-red-100' : 
-                        'bg-blue-50 hover:bg-blue-100'
-                      }>
-                        <td className="p-3 border-b border-blue-100 text-center">{index + 1}</td>
-                        
-                        {!isMobile && (
-                          <>
-                            <td className="p-3 border-b border-blue-100">{service.namaPelanggan}</td>
-                            <td className="p-3 border-b border-blue-100">{service.merkHP}</td>
-                            <td className="p-3 border-b border-blue-100">{service.kerusakan}</td>
+            
+            {servicesGroupedByDate.length > 0 ? (
+              servicesGroupedByDate.map((group, groupIndex) => (
+                <div key={groupIndex} className="mb-6 border-b border-gray-200 last:border-b-0">
+                  {/* Header Grup per Hari */}
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 border-b border-blue-100">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+                      <h3 className="text-lg font-semibold text-blue-800 mb-2 md:mb-0">
+                        <i className="fas fa-calendar-day mr-2"></i>
+                        {group.date}
+                      </h3>
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <div className="bg-white px-3 py-1 rounded-lg border border-blue-200">
+                          <span className="text-blue-600 font-medium">Total Service: </span>
+                          <span className="font-bold">{group.services.length}</span>
+                        </div>
+                        <div className="bg-white px-3 py-1 rounded-lg border border-green-200">
+                          <span className="text-green-600 font-medium">Total Pendapatan: </span>
+                          <span className="font-bold">Rp {group.totalPendapatan.toLocaleString()}</span>
+                        </div>
+                        <div className="bg-white px-3 py-1 rounded-lg border border-purple-200">
+                          <span className="text-purple-600 font-medium">Total Laba: </span>
+                          <span className="font-bold">Rp {group.totalLaba.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabel Service untuk Hari Ini */}
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full">
+                      <thead>
+                        <tr className="bg-gradient-to-r from-blue-100 to-purple-100">
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">No</th>
+                          <th className="p-3 border-b border-blue-200 text-blue-800">ID Service</th>
+                          {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Pelanggan</th>}
+                          {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Merk HP</th>}
+                          {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Kerusakan</th>}
+                          {!isMobile && <th className="p-3 border-b border-blue-200 text-blue-800">Sparepart</th>}
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">Biaya Service</th>
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">Biaya Sparepart</th>
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">Total Pendapatan</th>
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">Laba</th>
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">Status</th>
+                          <th className="p-3 border-b border-blue-200 text-center text-blue-800">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.services.map((service, index) => (
+                          <tr key={service.id} className={
+                            service.status === 'Sudah Selesai' ? 'bg-green-50 hover:bg-green-100' : 
+                            service.status === 'Batal' ? 'bg-red-50 hover:bg-red-100' : 
+                            'bg-blue-50 hover:bg-blue-100'
+                          }>
+                            <td className="p-3 border-b border-blue-100 text-center">{index + 1}</td>
+                            
+                            {/* Kolom ID Service */}
                             <td className="p-3 border-b border-blue-100">
-                              {editingService?.id === service.id ? (
-                                <div className="space-y-2">
-                                  <input
-                                    type="text"
-                                    placeholder="Cari sparepart..."
-                                    value={searchSparepart}
-                                    onChange={(e) => setSearchSparepart(e.target.value)}
-                                    className="w-full p-2 border border-blue-200 rounded text-sm"
-                                  />
-                                  
-                                  {editingService.sparepartsUsed.map((item, i) => (
-                                    <div key={i} className="flex gap-2 items-center">
-                                      <select
-                                        value={item.nama}
-                                        onChange={(e) => {
-                                          const updated = [...editingService.sparepartsUsed];
-                                          updated[i].nama = e.target.value;
-                                          setEditingService({...editingService, sparepartsUsed: updated});
-                                        }}
-                                        className="flex-1 p-2 border border-blue-200 rounded text-sm"
-                                      >
-                                        <option value="">Pilih Sparepart</option>
-                                        {filteredSpareparts.map(sp => (
-                                          <option key={sp.id} value={sp.nama_barang}>
-                                            {sp.nama_barang} (Stok: {sp.qty - sp.terpakai}, Harga: Rp {sp.harga_jual?.toLocaleString('id-ID')})
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <input
-                                        type="number"
-                                        value={item.qty}
-                                        onChange={(e) => {
-                                          const updated = [...editingService.sparepartsUsed];
-                                          updated[i].qty = Math.max(1, Number(e.target.value));
-                                          setEditingService({...editingService, sparepartsUsed: updated});
-                                        }}
-                                        className="w-16 p-2 border border-blue-200 rounded text-sm"
-                                        min="1"
-                                      />
-                                      <button
-                                        onClick={() => {
-                                          setEditingService({
-                                            ...editingService,
-                                            sparepartsUsed: editingService.sparepartsUsed.filter((_, idx) => idx !== i)
-                                          });
-                                        }}
-                                        className="text-red-500 px-1 hover:text-red-700"
-                                      >
-                                        <i className="fas fa-times"></i>
-                                      </button>
-                                    </div>
-                                  ))}
-                                  <button
-                                    onClick={() => {
-                                      setEditingService({
-                                        ...editingService,
-                                        sparepartsUsed: [...editingService.sparepartsUsed, { nama: '', qty: 1 }]
-                                      });
-                                    }}
-                                    className="text-blue-500 text-xs flex items-center gap-1 hover:text-blue-700"
-                                  >
-                                    <i className="fas fa-plus"></i> Tambah
-                                  </button>
-                                </div>
-                              ) : (
-                                <ul className="text-sm">
-                                  {service.sparepartsUsed?.map((item, i) => (
-                                    <li key={i} className="mb-1">
-                                      <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
-                                        {item.nama} (x{item.qty})
-                                      </span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
+                              <span className="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded-full text-xs font-mono font-bold">
+                                {service.serviceId || 'N/A'}
+                              </span>
                             </td>
-                          </>
-                        )}
-                        
-                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <input
-                         type="number"
-                         value={service.biaya || ''}
-                         onChange={(e) => handleUpdateBiaya(service.id, e.target.value)}
-                         className="border rounded px-2 py-1 w-24 text-right focus:ring focus:ring-blue-300"
-                         placeholder="0"
-                        />
-                        </td>
-  
-                        <td className="p-3 border-b border-blue-100 text-center">
-                          <select
-                            value={service.status}
-                            onChange={(e) => updateDoc(doc(db, 'service', service.id), {
-                              status: e.target.value,
-                              tanggalUpdate: serverTimestamp()
-                            }).then(fetchData)}
-                            className={`border px-3 py-1 rounded-full text-xs md:text-sm font-medium ${
-                              service.status === 'Sudah Selesai' ? 'bg-green-100 text-green-800 border-green-300' :
-                              service.status === 'Batal' ? 'bg-red-100 text-red-800 border-red-300' :
-                              service.status === 'Dalam Proses' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
-                              'bg-blue-100 text-blue-800 border-blue-300'
-                            }`}
-                          >
-                            <option value="Menunggu Konfirmasi">Menunggu</option>
-                            <option value="Dalam Proses">Proses</option>
-                            <option value="Sudah Selesai">Selesai</option>
-                            <option value="Batal">Batal</option>
-                          </select>
-                        </td>
-                        
-                        <td className="p-3 border-b border-blue-100 text-center">
-                           {editingService?.id === service.id ? (
-        <div className="flex gap-2 justify-center">
-          <button
-            onClick={handleEditSpareparts}
-            className="bg-green-500 text-white px-3 py-1 rounded-full text-xs hover:bg-green-600 transition-colors"
-          >
-            <i className="fas fa-check mr-1"></i> Simpan
-          </button>
-          <button
-            onClick={() => {
-              setEditingService(null);
-              setSearchSparepart('');
-            }}
-            className="bg-gray-500 text-white px-3 py-1 rounded-full text-xs hover:bg-gray-600 transition-colors"
-          >
-            <i className="fas fa-times mr-1"></i> Batal
-          </button>
-        </div>
-      ) : (
-        <div className="flex gap-2 justify-center">
-          <button
-            onClick={() => setEditingService(service)}
-            className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs hover:bg-blue-600 transition-colors"
-          >
-            <i className="fas fa-edit mr-1"></i> Edit
-          </button>
-          <button
-            onClick={() => handleDeleteService(service.id)}
-            className="bg-red-500 text-white px-3 py-1 rounded-full text-xs hover:bg-red-600 transition-colors"
-          >
-            <i className="fas fa-trash mr-1"></i> Hapus
-          </button>
-        </div>
-      )}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="p-6 text-center text-gray-500">
-                        <i className="fas fa-inbox text-4xl mb-3 text-blue-300"></i>
-                        <p>Tidak ada data service</p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            
+                            {!isMobile && (
+                              <>
+                                <td className="p-3 border-b border-blue-100">{service.namaPelanggan}</td>
+                                <td className="p-3 border-b border-blue-100">{service.merkHP}</td>
+                                <td className="p-3 border-b border-blue-100">{service.kerusakan}</td>
+                                <td className="p-3 border-b border-blue-100">
+                                  <ul className="text-sm">
+                                    {service.sparepartsUsed?.map((item, i) => (
+                                      <li key={i} className="mb-1">
+                                        <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
+                                          {item.nama} (x{item.qty})
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </td>
+                              </>
+                            )}
+                            
+                            <td className="p-3 border-b border-blue-100 text-center font-semibold">
+                              Rp {(service.biaya || 0).toLocaleString()}
+                            </td>
+                            
+                            <td className="p-3 border-b border-blue-100 text-center">
+                              Rp {(service.biayaSparepart || 0).toLocaleString()}
+                            </td>
+                            
+                            <td className="p-3 border-b border-blue-100 text-center font-semibold text-green-600">
+                              Rp {(service.totalPendapatan || 0).toLocaleString()}
+                            </td>
+                            
+                            <td className="p-3 border-b border-blue-100 text-center font-semibold text-purple-600">
+                              Rp {(service.totalLaba || 0).toLocaleString()}
+                            </td>
+                            
+                            <td className="p-3 border-b border-blue-100 text-center">
+                              <select
+                                value={service.status}
+                                onChange={(e) => updateDoc(doc(db, 'service', service.id), {
+                                  status: e.target.value,
+                                  tanggalUpdate: serverTimestamp()
+                                }).then(fetchData)}
+                                className={`border px-3 py-1 rounded-full text-xs md:text-sm font-medium ${
+                                  service.status === 'Sudah Selesai' ? 'bg-green-100 text-green-800 border-green-300' :
+                                  service.status === 'Batal' ? 'bg-red-100 text-red-800 border-red-300' :
+                                  service.status === 'Dalam Proses' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                                  'bg-blue-100 text-blue-800 border-blue-300'
+                                }`}
+                              >
+                                <option value="Menunggu Konfirmasi">Menunggu</option>
+                                <option value="Dalam Proses">Proses</option>
+                                <option value="Sudah Selesai">Selesai</option>
+                                <option value="Batal">Batal</option>
+                              </select>
+                            </td>
+                            
+                            <td className="p-3 border-b border-blue-100 text-center">
+                              <div className="flex gap-2 justify-center">
+                                {/* PERBAIKAN: Tambah tombol cetak nota untuk service */}
+                                <button
+                                  onClick={() => handleCetakNotaService(service)}
+                                  className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs hover:bg-blue-600 transition-colors"
+                                >
+                                  <i className="fas fa-print mr-1"></i> Nota
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteService(service.id)}
+                                  className="bg-red-500 text-white px-3 py-1 rounded-full text-xs hover:bg-red-600 transition-colors"
+                                >
+                                  <i className="fas fa-trash mr-1"></i> Hapus
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="p-6 text-center text-gray-500">
+                <i className="fas fa-inbox text-4xl mb-3 text-blue-300"></i>
+                <p>Tidak ada data service</p>
+              </div>
+            )}
+
+            {/* Summary Total Keseluruhan */}
+            {servicesGroupedByDate.length > 0 && (
+              <div className="bg-gradient-to-r from-green-50 to-teal-50 p-4 border-t border-green-200">
+                <div className="flex flex-wrap justify-center gap-6 text-sm">
+                  <div className="bg-white px-4 py-2 rounded-lg border border-green-300 shadow-sm">
+                    <span className="text-green-700 font-medium">Total Hari: </span>
+                    <span className="font-bold text-green-800">{servicesGroupedByDate.length}</span>
+                  </div>
+                  <div className="bg-white px-4 py-2 rounded-lg border border-blue-300 shadow-sm">
+                    <span className="text-blue-700 font-medium">Total Service: </span>
+                    <span className="font-bold text-blue-800">{services.length}</span>
+                  </div>
+                  <div className="bg-white px-4 py-2 rounded-lg border border-purple-300 shadow-sm">
+                    <span className="text-purple-700 font-medium">Total Pendapatan: </span>
+                    <span className="font-bold text-purple-800">
+                      Rp {servicesGroupedByDate.reduce((sum, group) => sum + group.totalPendapatan, 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="bg-white px-4 py-2 rounded-lg border border-orange-300 shadow-sm">
+                    <span className="text-orange-700 font-medium">Total Laba Bersih: </span>
+                    <span className="font-bold text-orange-800">
+                      Rp {servicesGroupedByDate.reduce((sum, group) => sum + group.totalLaba, 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         </>
       )}
 
-      {/* PERBAIKAN: TAB Input Pembelian */}
+      {/* PERBAIKAN: TAB Input Pembelian dengan Pembayaran */}
       {activeTab === 'pembelian' && (
         <section className="mb-6 p-6 bg-gradient-to-br from-white to-indigo-50 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4 text-indigo-800 flex items-center">
@@ -1440,11 +1754,33 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          <div className="flex justify-between items-center p-4 bg-indigo-100 rounded-lg mb-4">
-            <span className="text-lg font-semibold text-indigo-800">Total Pembelian:</span>
-            <span className="text-xl font-bold text-indigo-800">
-              Rp {newPembelian.totalHarga.toLocaleString()}
-            </span>
+          {/* PERBAIKAN: Tambah input pembayaran untuk pembelian */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="flex justify-between items-center p-4 bg-indigo-100 rounded-lg">
+              <span className="text-lg font-semibold text-indigo-800">Total Pembelian:</span>
+              <span className="text-xl font-bold text-indigo-800">
+                Rp {newPembelian.totalHarga.toLocaleString()}
+              </span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 text-indigo-700">Pembayaran (Rp)</label>
+              <input
+                type="number"
+                value={newPembelian.pembayaran}
+                onChange={(e) => handlePembayaranPembelianChange(Math.max(0, Number(e.target.value)))}
+                className="w-full p-3 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 text-indigo-700">Kembalian (Rp)</label>
+              <input
+                type="number"
+                value={newPembelian.kembalian}
+                readOnly
+                className="w-full p-3 border border-indigo-200 rounded-lg bg-gray-100 text-gray-700"
+              />
+            </div>
           </div>
 
           <button 
@@ -1456,7 +1792,7 @@ export default function AdminDashboard() {
         </section>
       )}
 
-      {/* TAB Input Penjualan */}
+      {/* PERBAIKAN: TAB Input Penjualan dengan Pembayaran */}
       {activeTab === 'penjualan' && (
         <section className="mb-6 p-6 bg-gradient-to-br from-white to-green-50 rounded-xl shadow-lg">
           <h2 className="text-xl font-semibold mb-4 text-green-800 flex items-center">
@@ -1519,7 +1855,6 @@ export default function AdminDashboard() {
                       {product.nama_barang} 
                       {product.kode_barang && ` (${product.kode_barang})`} 
                        Stok: {product.qty - product.terpakai} 
-                        
                     </option>
                   ))}
                 </select>
@@ -1553,11 +1888,33 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          <div className="flex justify-between items-center p-4 bg-green-100 rounded-lg">
-            <span className="text-lg font-semibold text-green-800">Total Harga:</span>
-            <span className="text-xl font-bold text-green-800">
-              Rp {newPenjualan.totalHarga.toLocaleString()}
-            </span>
+          {/* PERBAIKAN: Tambah input pembayaran untuk penjualan */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="flex justify-between items-center p-4 bg-green-100 rounded-lg">
+              <span className="text-lg font-semibold text-green-800">Total Harga:</span>
+              <span className="text-xl font-bold text-green-800">
+                Rp {newPenjualan.totalHarga.toLocaleString()}
+              </span>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 text-green-700">Pembayaran (Rp)</label>
+              <input
+                type="number"
+                value={newPenjualan.pembayaran}
+                onChange={(e) => handlePembayaranPenjualanChange(Math.max(0, Number(e.target.value)))}
+                className="w-full p-3 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1 text-green-700">Kembalian (Rp)</label>
+              <input
+                type="number"
+                value={newPenjualan.kembalian}
+                readOnly
+                className="w-full p-3 border border-green-200 rounded-lg bg-gray-100 text-gray-700"
+              />
+            </div>
           </div>
 
           <button 
@@ -1577,14 +1934,14 @@ export default function AdminDashboard() {
               <i className="fas fa-file-invoice mr-2"></i>Riwayat Pembelian
             </h2>
             <div className="mt-2">
-  <input
-    type="text"
-    placeholder="Cari berdasarkan supplier atau nama barang..."
-    value={searchPembelian}
-    onChange={(e) => setSearchPembelian(e.target.value)}
-    className="w-full p-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white/80 backdrop-blur-sm"
-  />
-</div>
+              <input
+                type="text"
+                placeholder="Cari berdasarkan supplier atau nama barang..."
+                value={searchPembelian}
+                onChange={(e) => setSearchPembelian(e.target.value)}
+                className="w-full p-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white/80 backdrop-blur-sm"
+              />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
