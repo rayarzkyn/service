@@ -77,7 +77,22 @@ export default function AdminDashboard() {
   // STATE BARU: Untuk service yang dikelompokkan per hari
   const [servicesGroupedByDate, setServicesGroupedByDate] = useState([]);
   
+  // STATE BARU: Untuk role badge
+  const [activeRole, setActiveRole] = useState('teknisi'); // 'admin' atau 'teknisi'
+  
   const router = useRouter();
+
+  // FUNGSI BARU: Handle menu click dengan role detection
+  const handleMenuClick = (menuType) => {
+    setActiveTab(menuType);
+    
+    // Set role berdasarkan menu yang dipilih
+    if (['stok', 'pembelian', 'penjualan', 'riwayat-penjualan', 'riwayat-pembelian'].includes(menuType)) {
+      setActiveRole('admin');
+    } else if (['service'].includes(menuType)) {
+      setActiveRole('teknisi');
+    }
+  };
 
   // FUNGSI BARU: Generate ID Service
   const generateServiceId = async () => {
@@ -1193,12 +1208,23 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4 md:p-6">
-      {/* Header */}
+      {/* Header dengan Role Badge */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-4 mb-6 shadow-lg">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Dashboard Admin</h1>
-            <p className="text-blue-100">Selamat datang, {user?.email}</p>
+            <h1 className="text-2xl font-bold text-white">
+              {activeRole === 'admin' ? '🏪 Dashboard Admin' : '🔧 Dashboard Teknisi'}
+            </h1>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-blue-100">Login sebagai: {user?.email}</p>
+              <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                activeRole === 'admin' 
+                  ? 'bg-yellow-100 text-yellow-800' 
+                  : 'bg-green-100 text-green-800'
+              }`}>
+                {activeRole === 'admin' ? 'ADMIN' : 'TEKNISI'}
+              </span>
+            </div>
           </div>
           <button 
             onClick={() => signOut(auth)} 
@@ -1209,76 +1235,82 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Tab Navigasi */}
+      {/* Tab Navigasi dengan Badge Role */}
       <div className="bg-white rounded-xl p-1 mb-6 shadow-md flex overflow-x-auto">
         <button
-          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm ${
+          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm flex items-center gap-2 ${
             activeTab === 'service'
               ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow'
               : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
           }`}
-          onClick={() => setActiveTab('service')}
+          onClick={() => handleMenuClick('service')}
         >
-          <i className="fas fa-tools mr-2"></i> Service
+          <i className="fas fa-tools"></i> Service
+          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">TEKNISI</span>
         </button>
 
         <button
-          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm ${
+          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm flex items-center gap-2 ${
             activeTab === 'pembelian'
               ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow'
               : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'
           }`}
-          onClick={() => setActiveTab('pembelian')}
+          onClick={() => handleMenuClick('pembelian')}
         >
-          <i className="fas fa-shopping-cart mr-2"></i> Input Pembelian
+          <i className="fas fa-shopping-cart"></i> Input Pembelian
+          <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">ADMIN</span>
         </button>
 
         <button
-          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm ${
+          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm flex items-center gap-2 ${
             activeTab === 'penjualan'
               ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow'
               : 'text-gray-500 hover:text-green-600 hover:bg-green-50'
           }`}
-          onClick={() => setActiveTab('penjualan')}
+          onClick={() => handleMenuClick('penjualan')}
         >
-          <i className="fas fa-cash-register mr-2"></i> Input Penjualan
+          <i className="fas fa-cash-register"></i> Input Penjualan
+          <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">ADMIN</span>
         </button>
 
         <button
-          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm ${
+          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm flex items-center gap-2 ${
             activeTab === 'stok'
               ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow'
               : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
           }`}
-          onClick={() => setActiveTab('stok')}
+          onClick={() => handleMenuClick('stok')}
         >
-          <i className="fas fa-boxes mr-2"></i> Manajemen Stok
+          <i className="fas fa-boxes"></i> Manajemen Stok
+          <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">ADMIN</span>
         </button>
 
         <button
-          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm ${
+          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm flex items-center gap-2 ${
             activeTab === 'riwayat-penjualan'
               ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow'
               : 'text-gray-500 hover:text-orange-600 hover:bg-orange-50'
           }`}
-          onClick={() => setActiveTab('riwayat-penjualan')}
+          onClick={() => handleMenuClick('riwayat-penjualan')}
         >
-          <i className="fas fa-history mr-2"></i> Riwayat Penjualan
+          <i className="fas fa-history"></i> Riwayat Penjualan
+          <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">ADMIN</span>
         </button>
 
         <button
-          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm ${
+          className={`px-4 py-3 font-medium rounded-lg whitespace-nowrap transition-all text-sm flex items-center gap-2 ${
             activeTab === 'riwayat-pembelian'
               ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow'
               : 'text-gray-500 hover:text-purple-600 hover:bg-purple-50'
           }`}
-          onClick={() => setActiveTab('riwayat-pembelian')}
+          onClick={() => handleMenuClick('riwayat-pembelian')}
         >
-          <i className="fas fa-file-invoice mr-2"></i> Riwayat Pembelian
+          <i className="fas fa-file-invoice"></i> Riwayat Pembelian
+          <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded">ADMIN</span>
         </button>
       </div>
 
-      {/* Konten berdasarkan Tab */}
+      {/* Konten berdasarkan Tab - TIDAK ADA PERUBAHAN */}
       {activeTab === 'service' && (
         <>
           {/* Form Tambah Service */}
