@@ -227,12 +227,12 @@ export default function HomePage() {
             >
               Cek Status Service
             </button>
-            <button 
+            {/*<button 
               onClick={handleShowCatalog}
               className="text-gray-600 hover:text-blue-600 transition-colors duration-200"
             >
               Katalog Service
-            </button>
+            </button>*/}
             <a href="#profil" className="text-gray-600 hover:text-blue-600 transition-colors duration-200">Profil</a>
             <a href="#tentang" className="text-gray-600 hover:text-blue-600 transition-colors duration-200">Tentang Kami</a>
             <a href="#website" className="text-gray-600 hover:text-blue-600 transition-colors duration-200">Tentang Website</a>
