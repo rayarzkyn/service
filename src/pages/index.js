@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Phone, Wrench, ShoppingBag, Info, Mail, Search, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Phone, Wrench, ShoppingBag, Info, Mail, Search, Clock, CheckCircle, XCircle, AlertCircle, List } from 'lucide-react';
 import { db } from '../firebase/config';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 
@@ -13,6 +13,10 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [showTracking, setShowTracking] = useState(false);
   const [stokBarang, setStokBarang] = useState([]);
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catalogData, setCatalogData] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   // Ambil data stok barang saat komponen dimuat
   useEffect(() => {
@@ -24,6 +28,9 @@ export default function HomePage() {
           ...doc.data()
         }));
         setStokBarang(stokData);
+        
+        // Set catalog data langsung dari stok barang
+        setCatalogData(stokData);
       } catch (error) {
         console.error('Error fetching stock data:', error);
       }
@@ -31,6 +38,21 @@ export default function HomePage() {
 
     fetchStokBarang();
   }, []);
+
+  // Filter data katalog berdasarkan pencarian
+  const filteredCatalog = catalogData.filter(item => 
+    item.nama_barang.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.kode_barang.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Fungsi untuk menampilkan section katalog
+  const handleShowCatalog = () => {
+    setShowCatalog(true);
+    // Scroll ke section katalog
+    setTimeout(() => {
+      document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
 
   // Fungsi untuk mencari service berdasarkan ID
   const searchService = async () => {
@@ -62,7 +84,7 @@ export default function HomePage() {
       const serviceDoc = querySnapshot.docs[0];
       const data = serviceDoc.data();
       
-      // PERBAIKAN: Hitung total biaya yang benar (biaya service + biaya sparepart harga jual)
+      // Hitung total biaya yang benar (biaya service + biaya sparepart harga jual)
       const biayaService = data.biaya || 0;
       
       // Hitung biaya sparepart berdasarkan harga jual
@@ -103,6 +125,7 @@ export default function HomePage() {
   // Fungsi untuk menampilkan section tracking
   const handleShowTracking = () => {
     setShowTracking(true);
+    setShowCatalog(false);
     // Scroll ke section tracking
     setTimeout(() => {
       document.getElementById('tracking')?.scrollIntoView({ behavior: 'smooth' });
@@ -141,6 +164,48 @@ export default function HomePage() {
     }
   };
 
+  // Fungsi untuk mendapatkan warna berdasarkan jenis sparepart
+  const getSparepartColor = (namaBarang) => {
+    const nama = namaBarang.toLowerCase();
+    
+    if (nama.includes('iphone')) {
+      return { bg: 'from-blue-50 to-purple-50', badge: 'bg-blue-100 text-blue-800' };
+    } else if (nama.includes('samsung')) {
+      return { bg: 'from-blue-50 to-cyan-50', badge: 'bg-cyan-100 text-cyan-800' };
+    } else if (nama.includes('oppo')) {
+      return { bg: 'from-green-50 to-emerald-50', badge: 'bg-green-100 text-green-800' };
+    } else if (nama.includes('vivo')) {
+      return { bg: 'from-purple-50 to-pink-50', badge: 'bg-purple-100 text-purple-800' };
+    } else if (nama.includes('xiaomi') || nama.includes('redmi') || nama.includes('poco')) {
+      return { bg: 'from-orange-50 to-red-50', badge: 'bg-orange-100 text-orange-800' };
+    } else if (nama.includes('realme')) {
+      return { bg: 'from-yellow-50 to-amber-50', badge: 'bg-yellow-100 text-yellow-800' };
+    } else if (nama.includes('flexi')) {
+      return { bg: 'from-indigo-50 to-purple-50', badge: 'bg-indigo-100 text-indigo-800' };
+    } else if (nama.includes('lcd') || nama.includes('layar')) {
+      return { bg: 'from-teal-50 to-green-50', badge: 'bg-teal-100 text-teal-800' };
+    } else if (nama.includes('baterai')) {
+      return { bg: 'from-amber-50 to-orange-50', badge: 'bg-amber-100 text-amber-800' };
+    } else {
+      return { bg: 'from-gray-50 to-slate-50', badge: 'bg-gray-100 text-gray-800' };
+    }
+  };
+
+  // Fungsi untuk mendapatkan kategori sparepart dari nama barang
+  const getSparepartCategory = (namaBarang) => {
+    const nama = namaBarang.toLowerCase();
+    
+    if (nama.includes('flexi')) return 'Flexi';
+    if (nama.includes('lcd') || nama.includes('layar')) return 'LCD/Layar';
+    if (nama.includes('baterai')) return 'Baterai';
+    if (nama.includes('camera') || nama.includes('kamera')) return 'Kamera';
+    if (nama.includes('charging') || nama.includes('port')) return 'Charging Port';
+    if (nama.includes('housing') || nama.includes('casing')) return 'Housing';
+    if (nama.includes('touchscreen') || nama.includes('touch')) return 'Touchscreen';
+    
+    return 'Sparepart';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-gray-800 flex flex-col">
       {/* Navbar */}
@@ -161,6 +226,12 @@ export default function HomePage() {
               className="text-gray-600 hover:text-blue-600 transition-colors duration-200"
             >
               Cek Status Service
+            </button>
+            <button 
+              onClick={handleShowCatalog}
+              className="text-gray-600 hover:text-blue-600 transition-colors duration-200"
+            >
+              Katalog Service
             </button>
             <a href="#profil" className="text-gray-600 hover:text-blue-600 transition-colors duration-200">Profil</a>
             <a href="#tentang" className="text-gray-600 hover:text-blue-600 transition-colors duration-200">Tentang Kami</a>
@@ -189,6 +260,15 @@ export default function HomePage() {
               className="block w-full text-left py-2 px-4 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             >
               Cek Status Service
+            </button>
+            <button 
+              onClick={() => {
+                handleShowCatalog();
+                setIsOpen(false);
+              }}
+              className="block w-full text-left py-2 px-4 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            >
+              Katalog Service
             </button>
             <a 
               href="#profil" 
@@ -232,7 +312,145 @@ export default function HomePage() {
 
       {/* Content Sections */}
       <main className="flex-1 max-w-5xl mx-auto px-4 py-12 space-y-16">
-        {/* SECTION BARU: Tracking Service - Hanya ditampilkan ketika showTracking true */}
+        {/* SECTION BARU: Katalog Service */}
+        {showCatalog && (
+          <motion.section
+            id="catalog"
+            className="border border-gray-200 rounded-2xl p-8 shadow-sm bg-white/80 backdrop-blur-sm"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="text-center mb-10">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-2xl shadow-md mb-4">
+                <List className="text-white w-8 h-8" />
+              </div>
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent mb-3">Katalog Sparepart HP</h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Cari dan lihat daftar harga sparepart untuk berbagai jenis HP. Ketik nama sparepart seperti "FLEXI", "LCD", "BATERAI" atau model HP seperti "OPPO RENO 3".
+              </p>
+            </div>
+
+            {/* Form Pencarian Katalog */}
+            <div className="max-w-2xl mx-auto mb-10">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Cari sparepart (contoh: FLEXI, LCD, OPPO RENO 3, iPhone, dll)"
+                  className="flex-1 px-5 py-4 border border-gray-300 rounded-xl focus:ring-3 focus:ring-green-200 focus:border-green-500 transition-all duration-200 text-lg shadow-sm"
+                />
+                <div className="px-4 py-4 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-xl flex items-center gap-3 shadow-md font-medium">
+                  <Search className="w-5 h-5" />
+                  <span>Cari</span>
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-2 text-center">
+                {filteredCatalog.length} items ditemukan
+              </p>
+            </div>
+
+            {/* Hasil Pencarian Katalog */}
+            <div className="max-w-6xl mx-auto">
+              {catalogLoading ? (
+                <div className="text-center py-12">
+                  <div className="inline-block w-12 h-12 border-4 border-green-200 border-t-green-600 rounded-full animate-spin mb-4"></div>
+                  <p className="text-gray-600 text-lg">Memuat data katalog...</p>
+                </div>
+              ) : filteredCatalog.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredCatalog.map((item, index) => {
+                    const colors = getSparepartColor(item.nama_barang);
+                    const category = getSparepartCategory(item.nama_barang);
+                    
+                    return (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                      >
+                        <div className={`p-4 bg-gradient-to-r ${colors.bg}`}>
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="text-lg font-bold text-gray-800 line-clamp-2">{item.nama_barang}</h3>
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${colors.badge}`}>
+                              {category}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 font-mono">{item.kode_barang}</p>
+                        </div>
+                        <div className="p-4">
+                          <div className="flex justify-between items-center mb-3">
+                            <span className="text-2xl font-bold text-green-600">
+                              Rp {item.harga_jual?.toLocaleString() || '0'}
+                            </span>
+                            <div className="text-right">
+                              <span className={`text-sm font-semibold ${item.qty > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                Stok: {item.qty || 0}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                            <div>
+                              <span className="font-semibold">Kode:</span>
+                              <p className="truncate font-mono">{item.kode_barang}</p>
+                            </div>
+                            <div>
+                              <span className="font-semibold">Kategori:</span>
+                              <p className="truncate">{category}</p>
+                            </div>
+                          </div>
+                          {item.terpakai > 0 && (
+                            <div className="mt-2 text-xs text-amber-600">
+                              <span className="font-semibold">Terpakai: {item.terpakai}</span>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center py-12 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl"
+                >
+                  <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-amber-800 mb-2">Data Tidak Ditemukan</h3>
+                  <p className="text-amber-700">
+                    {searchTerm 
+                      ? `Tidak ditemukan sparepart untuk "${searchTerm}". Coba kata kunci lain seperti "FLEXI", "LCD", "BATERAI", "OPPO", atau "iPhone".`
+                      : 'Masukkan kata kunci pencarian untuk melihat daftar harga sparepart.'
+                    }
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Informasi Katalog */}
+              {!catalogLoading && filteredCatalog.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-12 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6"
+                >
+                  <h4 className="font-bold text-blue-800 mb-3 text-lg">Informasi Harga Sparepart:</h4>
+                  <ul className="text-blue-700 space-y-2 text-sm">
+                    <li className="flex items-center gap-2">• Harga yang ditampilkan adalah harga jual sparepart</li>
+                    <li className="flex items-center gap-2">• Biaya service/jasa belum termasuk dalam harga di atas</li>
+                    <li className="flex items-center gap-2">• Stok dapat berubah sewaktu-waktu</li>
+                    <li className="flex items-center gap-2">• Harga dapat berubah tanpa pemberitahuan sebelumnya</li>
+                    <li className="flex items-center gap-2">• Hubungi kami untuk informasi lebih detail dan ketersediaan</li>
+                  </ul>
+                </motion.div>
+              )}
+            </div>
+          </motion.section>
+        )}
+
+        {/* SECTION: Tracking Service - Hanya ditampilkan ketika showTracking true */}
         {showTracking && (
           <motion.section
             id="tracking"
@@ -342,7 +560,6 @@ export default function HomePage() {
                       <p className="text-2xl font-bold text-green-600">
                         Rp {serviceData.totalBiaya?.toLocaleString() || '0'}
                       </p>
-                      {/* PERBAIKAN: Tampilkan rincian biaya */}
                       {serviceData.biayaService > 0 && serviceData.biayaSparepart > 0 && (
                         <div className="text-sm text-gray-600 mt-1">
                           <div>Biaya Service: Rp {serviceData.biayaService?.toLocaleString()}</div>
@@ -476,8 +693,9 @@ export default function HomePage() {
           <p className="text-xl leading-relaxed text-gray-700 max-w-4xl mx-auto">
             Website ini dirancang sebagai pusat informasi dan sistem manajemen internal untuk Goku Komunika.
             Di sini, pelanggan dapat <strong className="text-blue-600">memantau status perbaikan perangkat</strong> menggunakan ID Service,
-            sedangkan admin dapat mengelola stok barang, pencatatan penjualan, dan pengaturan layanan dengan mudah. 
-            Desainnya dibuat agar <em className="text-purple-600">user-friendly</em>, responsif, dan dapat diakses kapan saja dari berbagai perangkat.
+            <strong className="text-blue-600"> melihat katalog harga sparepart</strong> berbagai jenis HP, sedangkan admin dapat mengelola stok barang, 
+            pencatatan penjualan, dan pengaturan layanan dengan mudah. Desainnya dibuat agar <em className="text-purple-600">user-friendly</em>, 
+            responsif, dan dapat diakses kapan saja dari berbagai perangkat.
           </p>
         </motion.section>
 

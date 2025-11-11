@@ -71,19 +71,22 @@ export default function LoginPage() {
 
       // 6. Redirect berdasarkan role
       switch (userRole.toLowerCase()) {
-  case 'admin':
-    router.push('/admin');
-    break;
-  case 'pelanggan':
-    router.push('/pelanggan');
-    break;
-  case 'kepala_toko':
-    router.push('/kepala_toko');  // halaman khusus kepala toko
-    break;
-  default:
-    setError('Role tidak dikenali: ' + userRole);
-    setIsLoading(false);
-}
+        case 'admin':
+          router.push('/admin');
+          break;
+        case 'pelanggan':
+          router.push('/pelanggan');
+          break;
+        case 'kepala_toko':
+          router.push('/kepala_toko');
+          break;
+        case 'teknisi':
+          router.push('/teknisi');
+          break;
+        default:
+          setError('Role tidak dikenali: ' + userRole);
+          setIsLoading(false);
+      }
 
     } catch (err) {
       console.error('Login error:', {
